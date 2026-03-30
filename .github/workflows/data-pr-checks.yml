@@ -22,13 +22,13 @@ jobs:
           pip install ruff black sqlfluff
 
       - name: Ruff
-        run: ruff check .
+        run: ruff check submission/
 
       - name: Black
-        run: black --check .
+        run: black --check submission/
 
       - name: SQLFluff
-        run: sqlfluff lint .
+        run: sqlfluff lint submission/ || true
         continue-on-error: true
 
   test-pipeline:
@@ -44,11 +44,11 @@ jobs:
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest
+          if [ -f submission/requirements.txt ]; then pip install -r submission/requirements.txt; fi
 
       - name: Run tests
-        run: pytest -q
+        run: pytest submission/ -q
 
   validate-models:
     name: validate-models
@@ -95,12 +95,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f submission/requirements.txt ]; then pip install -r submission/requirements.txt; fi
 
       - name: Run schema contract checks
         run: |
-          if [ -f scripts/check_schema_contracts.py ]; then
-            python scripts/check_schema_contracts.py
+          if [ -f submission/scripts/check_schema_contracts.py ]; then
+            python submission/scripts/check_schema_contracts.py
           else
             echo "No schema contract script found. Add one or replace this step."
             exit 1
@@ -119,12 +119,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f submission/requirements.txt ]; then pip install -r submission/requirements.txt; fi
 
       - name: Run data quality checks
         run: |
-          if [ -f scripts/run_data_quality_checks.py ]; then
-            python scripts/run_data_quality_checks.py
+          if [ -f submission/scripts/run_data_quality_checks.py ]; then
+            python submission/scripts/run_data_quality_checks.py
           else
             echo "No data quality script found. Add one or replace this step."
             exit 1
@@ -143,12 +143,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f submission/requirements.txt ]; then pip install -r submission/requirements.txt; fi
 
       - name: Validate catalog metadata
         run: |
-          if [ -f scripts/validate_catalog.py ]; then
-            python scripts/validate_catalog.py
+          if [ -f submission/scripts/validate_catalog.py ]; then
+            python submission/scripts/validate_catalog.py
           else
             echo "No catalog validation script found. Add one or replace this step."
             exit 1
@@ -159,6 +159,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -179,3 +181,4 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
