@@ -1,50 +1,111 @@
-# Data Engineering Assignment
+# cdc-lakehouse-app
 
-## Overview
+Local CDC lakehouse reliability prototype for the data engineering assignment.
 
-This repository contains the take-home assignment for data engineering candidates at Kulu. Full assignment details, requirements, and evaluation criteria are documented in [DATA_ASSIGNMENT.md](./DATA_ASSIGNMENT.md).
+## What this repo demonstrates
 
----
+- a realistic transactional source schema
+- CDC capture of inserts, updates, and deletes
+- PostgreSQL-backed source, lake, warehouse, and control schemas
+- a browser UI with all changes and live dataset views
+- schema drift detection with fail-closed behavior
+- parity validations between source assumptions and warehouse models
+- a lightweight JSON catalog payload exposed through the UI
 
-## How to Submit
+## Architecture
 
-### 1. Fork this repository
+Read the design first:
 
-Click the **Fork** button at the top-right of this GitHub repository page to create your own copy under your GitHub account.
+- [docs/architecture.md](docs/architecture.md)
+- [docs/pr_description.md](docs/pr_description.md)
 
-### 2. Clone your fork
+## Layout
+
+- `cdc_lakehouse/` - implementation
+- `tests/` - unittest coverage for CDC, replay, schema drift, restore, and catalog
+- `docs/` - design and PR text
+
+## Run it locally
+
+Point the app at a PostgreSQL database with environment variables:
 
 ```bash
-git clone https://github.com/<your-username>/data-assignments.git
-cd data-assignments
+export CDC_PGHOST=127.0.0.1
+export CDC_PGPORT=5432
+export CDC_PGUSER=postgres
+export CDC_PGDATABASE=cdc_lakehouse
 ```
-
-### 3. Complete the assignment
-
-Work on your solution inside your forked repository. Refer to [DATA_ASSIGNMENT.md](./DATA_ASSIGNMENT.md) for the full problem statement, requirements, and evaluation criteria.
-
-### 4. Push your changes
-
-Commit and push your work to your fork:
 
 ```bash
-git add .
-git commit -m "Submit assignment"
-git push origin main
+python3 -m cdc_lakehouse.cli init
+python3 -m cdc_lakehouse.cli seed
+python3 -m cdc_lakehouse.cli sync
+python3 -m cdc_lakehouse.cli validate
 ```
 
-### 5. Open a Pull Request
+## Run as an inspector service
 
-Once you are done, open a **Pull Request** from your fork back to this repository:
+```bash
+python3 -m cdc_lakehouse.cli serve
+```
 
-1. Go to your forked repository on GitHub.
-2. Click **Contribute** > **Open pull request**.
-3. Add a brief description of your approach and any decisions you made.
-4. Submit the pull request.
+Then open `http://localhost:8080/` or `http://localhost:8080/changes`.
 
----
+## Run on Minikube
+
+```bash
+minikube start --driver=docker --cpus=4 --memory=6g
+eval "$(minikube docker-env)"
+docker build -t cdc-lakehouse-app:local .
+kubectl apply -k k8s
+kubectl get pods -n cdc-lakehouse
+kubectl port-forward -n cdc-lakehouse svc/cdc-lakehouse-inspector 8080:80
+```
+
+Then open:
+
+- `http://localhost:8080/`
+- `http://localhost:8080/state`
+- `http://localhost:8080/catalog`
+- `http://localhost:8080/changes`
+- `http://localhost:8080/warehouse/orders/current`
+
+The bootstrap Job initializes the Postgres schemas, seeds demo data, runs CDC sync, validates the warehouse, and writes a `bootstrap.done` marker into the PVC. The inspector Deployment waits for that marker before serving traffic.
+
+## Understand the flow
+
+Open these pages in order:
+
+1. `http://localhost:8080/`
+2. `http://localhost:8080/changes`
+3. `http://localhost:8080/source/customers`
+4. `http://localhost:8080/warehouse/customers/current`
+5. `http://localhost:8080/warehouse/customers/history`
+6. `http://localhost:8080/catalog`
+
+## Point-in-time snapshot
+
+```bash
+python3 -m cdc_lakehouse.cli snapshot --as-of 2026-01-01T00:00:00+00:00
+```
+
+## Simulate schema drift
+
+```bash
+python3 -m cdc_lakehouse.cli break-schema
+python3 -m cdc_lakehouse.cli sync
+```
+
+The sync should stop with a schema drift error.
+
+## Run tests
+
+```bash
+python3 -m unittest discover -s tests -p 'test_*.py'
+```
 
 ## Notes
 
-- Make sure your solution runs and all instructions for running it are included.
-- If you have any questions, reach out to the hiring team.
+- This uses a pure-Python PostgreSQL wire client so the repo stays dependency-light.
+- In production, the CDC boundary would usually move into the source database log or a dedicated CDC service.
+- The repo is designed to be easy to reason about under replay, restart, and schema-change failure modes.

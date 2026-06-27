@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cdc-lakehouse-inspector
+  namespace: cdc-lakehouse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cdc-lakehouse-inspector
+  template:
+    metadata:
+      labels:
+        app: cdc-lakehouse-inspector
+    spec:
+      initContainers:
+        - name: wait-for-bootstrap
+          image: cdc-lakehouse-app:local
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              until [ -f /data/bootstrap.done ]; do
+                echo "waiting for bootstrap job..."
+                sleep 2
+              done
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      containers:
+        - name: inspector
+          image: cdc-lakehouse-app:local
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: CDC_PGHOST
+              value: cdc-lakehouse-postgres
+            - name: CDC_PGPORT
+              value: "5432"
+            - name: CDC_PGUSER
+              value: postgres
+            - name: CDC_PGDATABASE
+              value: cdc_lakehouse
+          command:
+            - python3
+            - -m
+            - cdc_lakehouse.cli
+            - serve
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: cdc-lakehouse-data

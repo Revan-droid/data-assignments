@@ -1,0 +1,43 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cdc-lakehouse-bootstrap
+  namespace: cdc-lakehouse
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: cdc-lakehouse-bootstrap
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: bootstrap
+          image: cdc-lakehouse-app:local
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: CDC_PGHOST
+              value: cdc-lakehouse-postgres
+            - name: CDC_PGPORT
+              value: "5432"
+            - name: CDC_PGUSER
+              value: postgres
+            - name: CDC_PGDATABASE
+              value: cdc_lakehouse
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              python3 -m cdc_lakehouse.cli init
+              python3 -m cdc_lakehouse.cli seed
+              python3 -m cdc_lakehouse.cli sync
+              python3 -m cdc_lakehouse.cli validate
+              touch /data/bootstrap.done
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: cdc-lakehouse-data

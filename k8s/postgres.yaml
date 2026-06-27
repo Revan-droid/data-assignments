@@ -1,0 +1,69 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cdc-lakehouse-postgres
+  namespace: cdc-lakehouse
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+  selector:
+    app: cdc-lakehouse-postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: cdc-lakehouse-postgres
+  namespace: cdc-lakehouse
+spec:
+  serviceName: cdc-lakehouse-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cdc-lakehouse-postgres
+  template:
+    metadata:
+      labels:
+        app: cdc-lakehouse-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: cdc_lakehouse
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_HOST_AUTH_METHOD
+              value: trust
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U postgres -d cdc_lakehouse
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U postgres -d cdc_lakehouse
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 2Gi
+
